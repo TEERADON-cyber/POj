@@ -1,6 +1,10 @@
 <%- include('layout-top') %>
 
 <h2>Admin Dashboard</h2>
+<p>
+  <a href="/admin/report" class="btn">View Report</a>
+  <button class="btn" style="background-color: #DC2626; margin-left: 10px;" onclick="confirmClearData()">Clear All Data</button>
+</p>
 
 <h3>All Parcels</h3>
 <table>
@@ -21,25 +25,30 @@
         <td><%= p.parcel_id %></td>
         <td><%= p.tracking_number %></td>
         <td><%= p.customer_name || p.sender_id %></td>
-        <td><%= p.receiver_name %></td>
+        <td>
+          <%= p.receiver_name %>
+          <% if (p.receiver_phone) { %><br><small class="sub-text"><strong>Phone:</strong> <%= p.receiver_phone %></small><% } %>
+          <% if (p.receiver_address) { %><br><small class="sub-text"><strong>Address:</strong> <%= p.receiver_address %></small><% } %>
+        </td>
         <td><%= Number(p.shipping_cost).toFixed(2) %></td>
         <td>
           <% let badgeClass=''; let text=p.status; switch(p.status){
-               case 'Pending': badgeClass='badge badge-orange'; break;
-               case 'Paid': badgeClass='badge badge-green'; break;
-               case 'Shipped': badgeClass='badge badge-blue'; break;
+               case 'Pending': badgeClass='status-pending'; break;
+               case 'Ready to Ship': badgeClass='status-ready'; break;
+               case 'Paid':
+               case 'Shipped': badgeClass='status-paid'; break;
                case 'Delivered': badgeClass='badge badge-gray'; break;
-               case 'Cancelled': badgeClass='badge badge-red'; break;
+               case 'Cancelled': badgeClass='status-cancel'; break;
              }
           %>
           <span class="<%= badgeClass %>"><%= text %></span>
         </td>
         <td>
-          <a href="/parcels/<%= p.parcel_id %>">View</a>
+          <a class="btn small" href="/parcels/<%= p.parcel_id %>">View</a>
           <% if(p.status==='Pending'){ %>
-            <form action="/admin/parcel/cancel" method="post" style="display:inline;">
+            <form action="/admin/parcel/cancel" method="post" style="display:inline; background: transparent; padding: 0; border: none; margin: 0;" id="cancelForm-<%= p.parcel_id %>">
               <input type="hidden" name="parcel_id" value="<%= p.parcel_id %>" />
-              <button type="submit" class="btn secondary" onclick="return confirm('ยืนยันยกเลิกพัสดุนี้?');">Cancel</button>
+              <button type="button" class="btn danger small" onclick="confirmCancel(<%= p.parcel_id %>);">Cancel</button>
             </form>
           <% } else if(p.status==='Paid'){ %>
             <form action="/admin/parcel/ship" method="post" style="display:inline;">
@@ -64,7 +73,9 @@
     <tr>
       <th>ID</th>
       <th>Parcel ID</th>
-
+      <th>Amount</th>
+      <th>Method</th>
+      <th>Date</th>
       <th>Status</th>
       <th>Action</th>
     </tr>
@@ -74,19 +85,67 @@
       <tr>
         <td><%= p.payment_id %></td>
         <td><%= p.parcel_id %></td>
+        <td><%= Number(p.amount || 0).toFixed(2) %></td>
+        <td><%= p.payment_method || '-' %></td>
+        <td><%= p.payment_date ? p.payment_date.split('T')[0] : '-' %></td>
         <td>
-          <form action="/admin/payment/update-status" method="post" style="display:inline;">
+          <form action="/admin/payment/update-status" method="post" style="display:inline; background: transparent; padding: 0; border: none; margin: 0;">
             <input type="hidden" name="payment_id" value="<%= p.payment_id %>" />
-            <select name="payment_status" onchange="this.form.submit()">
+            <select name="payment_status" class="payment-status" onchange="this.form.submit()">
               <option value="Pending" <%= p.payment_status === 'Pending' ? 'selected' : '' %>>Pending</option>
               <option value="Paid" <%= p.payment_status === 'Paid' ? 'selected' : '' %>>Paid</option>
               <option value="Cancelled" <%= p.payment_status === 'Cancelled' ? 'selected' : '' %>>Cancelled</option>
             </select>
           </form>
         </td>
+        <td><!-- action column, empty for now --></td>
       </tr>
     <% }) %>
   </tbody>
 </table>
+
+<script>
+function confirmClearData() {
+  Swal.fire({
+    title: 'Clear All Data?',
+    html: '<p style="color: #DC2626; font-weight: bold;">⚠️ WARNING: This will permanently delete ALL parcels and payments.</p><p>Customers will be preserved. This action cannot be undone.</p>',
+    icon: 'warning',
+    confirmButtonColor: '#DC2626',
+    cancelButtonColor: '#3b82f6',
+    confirmButtonText: 'Yes, clear all data',
+    cancelButtonText: 'Cancel',
+    showCancelButton: true
+  }).then((result) => {
+    if (result.isConfirmed) {
+      // Send POST request to clear data
+      fetch('/admin/clear-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        Swal.fire({
+          title: 'Success!',
+          text: 'All parcel and payment data has been cleared. Customers preserved.',
+          icon: 'success',
+          confirmButtonColor: '#3B82F6'
+        }).then(() => {
+          location.reload();
+        });
+      })
+      .catch(error => {
+        Swal.fire({
+          title: 'Error!',
+          text: 'Failed to clear data: ' + error.message,
+          icon: 'error',
+          confirmButtonColor: '#DC2626'
+        });
+      });
+    }
+  });
+}
+</script>
 
 <%- include('layout-bottom') %>

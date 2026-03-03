@@ -8,6 +8,24 @@ function calculateShippingCost(weight) {
   return base + perKg * Math.max(0, weight);
 }
 
+// Automatic size calculation based on weight
+function calculateSize(weight) {
+  const w = parseFloat(weight);
+  
+  // Validate weight range
+  if (isNaN(w) || w <= 0 || w > 100) {
+    throw new Error("Weight must be between 0.1 and 100 kg");
+  }
+
+  // Size determination based on weight
+  if (w <= 1) return "S";
+  if (w <= 5) return "M";
+  if (w <= 15) return "L";
+  if (w <= 30) return "XL";
+  if (w <= 60) return "XXL";
+  return "XXXL";
+}
+
 function generateTrackingNumber() {
   const now = Date.now().toString(36).toUpperCase();
   const rand = Math.floor(Math.random() * 9000 + 1000).toString();
@@ -18,15 +36,92 @@ const parcelController = {
   showCreate: (req, res) => res.render('create-parcel'),
   createParcel: (req, res) => {
     const sender_id = req.session.customer.id;
-    const { receiver_name, receiver_phone, receiver_address, weight, size } = req.body;
-    const w = parseFloat(weight) || 0;
-    const shipping_cost = calculateShippingCost(w);
-    const tracking_number = generateTrackingNumber();
-    Parcel.create({ tracking_number, sender_id, receiver_name, receiver_phone, receiver_address, weight: w, size, shipping_cost, status: 'Pending' }, (err, parcel_id) => {
-      if (err) return res.render('create-parcel', { error: 'Failed to create parcel' });
-      // payment will be created when customer actually pays
-      res.redirect('/parcels/' + parcel_id);
-    });
+    const {
+      receiver_name,
+      receiver_phone,
+      // split address fields
+      house_no,
+      moo,
+      soi,
+      road,
+      subdistrict,
+      district,
+      province,
+      postal_code,
+      weight
+    } = req.body;
+    
+    // ==========================================
+    // RECEIVER ADDRESS VALIDATION (Backend)
+    // ==========================================
+    if (!house_no || !subdistrict || !district || !province) {
+      return res.render('create-parcel', { error: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' });
+    }
+
+    // build full address string
+    const parts = [];
+    parts.push(house_no);
+    if (moo) parts.push('หมู่ ' + moo);
+    if (soi) parts.push('ซอย ' + soi);
+    if (road) parts.push('ถนน ' + road);
+    parts.push('ตำบล' + subdistrict);
+    parts.push('อำเภอ' + district);
+    parts.push('จังหวัด' + province);
+    if (postal_code) parts.push(postal_code);
+    const fullAddress = parts.join(' ').replace(/\s+/g, ' ').trim();
+    
+    // ==========================================
+    // STRICT WEIGHT VALIDATION (Backend)
+    // ==========================================
+    
+    // Parse weight as a number
+    const w = Number(weight);
+    
+    // Check if weight is a valid number
+    if (isNaN(w) || weight === '' || weight === undefined) {
+      return res.render('create-parcel', { error: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' });
+    }
+    
+    // Check if weight is greater than 0
+    if (w <= 0) {
+      return res.render('create-parcel', { error: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' });
+    }
+    
+    // Check if weight exceeds maximum (100 kg)
+    if (w > 100) {
+      return res.render('create-parcel', { error: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' });
+    }
+    
+    // Round weight to 1 decimal place for consistency
+    const finalWeight = Math.round(w * 10) / 10;
+    
+    try {
+      // Validate and calculate size automatically
+      const size = calculateSize(finalWeight);
+      
+      const shipping_cost = calculateShippingCost(finalWeight);
+      const tracking_number = generateTrackingNumber();
+      
+      Parcel.create({ 
+        tracking_number, 
+        sender_id, 
+        receiver_name, 
+        receiver_phone, 
+        receiver_address: fullAddress, 
+        weight: finalWeight,  // Use rounded weight
+        size,  // Use calculated size, NOT from frontend
+        shipping_cost, 
+        status: 'Pending' 
+      }, (err, parcel_id) => {
+        if (err) {
+          return res.render('create-parcel', { error: 'Failed to create parcel: ' + err.message });
+        }
+        // payment will be created when customer actually pays
+        res.redirect('/parcels/' + parcel_id);
+      });
+    } catch (err) {
+      return res.render('create-parcel', { error: err.message });
+    }
   },
   dashboard: (req, res) => {
     const sender_id = req.session.customer.id;
@@ -95,4 +190,4 @@ const parcelController = {
   }
 };
 
-module.exports = { parcelController, calculateShippingCost };
+module.exports = { parcelController, calculateShippingCost, calculateSize };

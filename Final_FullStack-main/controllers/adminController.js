@@ -15,12 +15,106 @@ const adminController = {
       
       // Get all payments with additional info
       db.all(`
-        SELECT p.payment_id, p.parcel_id, p.amount, p.payment_method, p.payment_status, p.payment_date
+        SELECT p.payment_id,
+               p.parcel_id,
+               p.amount,
+               p.payment_method,
+               p.payment_status,
+               p.payment_date
         FROM Payments p
         ORDER BY p.payment_date DESC
       `, (err2, payments) => {
         if (err2) payments = [];
         res.render('admin-dashboard', { parcels, payments });
+      });
+    });
+  },
+
+  report: (req, res) => {
+    console.log('[adminController.report] invoked. session=', !!(req && req.session && req.session.customer));
+    const db = require('../Database/Database');
+    const stats = {};
+    // allow optional date filter (daily/weekly/monthly) via query param 'range' (not used in queries yet)
+    const { range } = req.query;
+    db.serialize(() => {
+      // total revenue for paid payments
+      db.get("SELECT SUM(amount) AS totalRevenuePaid FROM Payments WHERE payment_status='Paid'", (err0, r0) => {
+        stats.totalRevenuePaid = (r0 && r0.totalRevenuePaid) || 0;
+        // total parcels count
+        db.get('SELECT COUNT(*) AS parcelCount FROM Parcels', (err1, r1) => {
+          stats.totalParcels = (r1 && r1.parcelCount) || 0;
+          // pending COD amount (still pending)
+          db.get(
+            "SELECT SUM(amount) AS pendingCOD FROM Payments WHERE payment_status = 'Pending' AND payment_method = 'COD'",
+            (err2, r2) => {
+              stats.pendingCOD = (r2 && r2.pendingCOD) || 0;
+              // success rate: delivered or shipped vs all
+              db.get(
+                "SELECT SUM(CASE WHEN status IN ('Delivered','Shipped') THEN 1 ELSE 0 END) AS successCount, COUNT(*) AS totalCount FROM Parcels",
+                (err3, r3) => {
+                  stats.successCount = (r3 && r3.successCount) || 0;
+                  stats.totalCount = (r3 && r3.totalCount) || 0;
+                  stats.successRate = stats.totalCount ? stats.successCount / stats.totalCount : 0;
+                  // revenue by payment method (COD vs Online)
+                  db.all(
+                    "SELECT payment_method, SUM(amount) AS total FROM Payments GROUP BY payment_method",
+                    (err4, rows4) => {
+                      stats.revenueByMethod = rows4 || [];
+                      // COD shipped/delivered but unpaid
+                      db.all(
+                        `SELECT p.payment_id, p.amount, par.status, p.payment_status
+                         FROM Payments p
+                         JOIN Parcels par ON p.parcel_id = par.parcel_id
+                         WHERE p.payment_method='COD' AND p.payment_status='Pending' AND par.status IN ('Shipped','Delivered')`,
+                        (err5, rows5) => {
+                          stats.codOutstanding = rows5 || [];
+                          // parcels pending/ready older than 7 days
+                          db.get(
+                            "SELECT COUNT(*) AS overdueCount FROM Parcels WHERE status IN ('Ready to Ship','Pending') AND datetime(created_at) <= datetime('now','-7 days')",
+                            (err6, r6) => {
+                              stats.overdueCount = (r6 && r6.overdueCount) || 0;
+                              // tracking logs by location
+                              db.all(
+                                'SELECT location, COUNT(*) AS count FROM Tracking GROUP BY location ORDER BY count DESC',
+                                (err7, rows7) => {
+                                  stats.trackLocations = rows7 || [];
+                                  // top customers by parcel count
+                                  db.all(
+                                    `SELECT c.customer_name, COUNT(*) AS sentCount
+                                     FROM Parcels par
+                                     JOIN Customers c ON par.sender_id = c.customer_id
+                                     GROUP BY par.sender_id
+                                     ORDER BY sentCount DESC
+                                     LIMIT 5`,
+                                    (err8, rows8) => {
+                                      stats.topCustomers = rows8 || [];
+                                      // latest 10 parcels with sender name
+                                      db.all(
+                                        `SELECT par.parcel_id, par.receiver_name, par.created_at, c.customer_name AS sender_name
+                                         FROM Parcels par
+                                         LEFT JOIN Customers c ON par.sender_id = c.customer_id
+                                         ORDER BY par.created_at DESC
+                                         LIMIT 10`,
+                                        (err9, rows9) => {
+                                          stats.latestParcels = rows9 || [];
+                                          res.render('report', { stats, range });
+                                        }
+                                      );
+                                    }
+                                  );
+                                }
+                              );
+                            }
+                          );
+                        }
+                      );
+                    }
+                  );
+                }
+              );
+            }
+          );
+        });
       });
     });
   },
@@ -35,8 +129,31 @@ const adminController = {
   markShipped: (req, res) => {
     const { parcel_id } = req.body;
     const db = require('../Database/Database');
-    db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', ['Shipped', parcel_id], () => {
-      res.redirect('/admin/dashboard');
+    // update parcel status and record a tracking entry
+    db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', ['Shipped', parcel_id], function (err) {
+      if (!err) {
+        // ensure tracking table exists (migration safety)
+        db.run(`
+          CREATE TABLE IF NOT EXISTS Tracking (
+            tracking_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parcel_id INTEGER NOT NULL,
+            update_time TEXT DEFAULT (datetime('now')),
+            location TEXT,
+            description TEXT,
+            FOREIGN KEY (parcel_id) REFERENCES Parcels(parcel_id) ON DELETE CASCADE
+          )
+        `, () => {
+          db.run(
+            'INSERT INTO Tracking (parcel_id, location, description) VALUES (?, ?, ?)',
+            [parcel_id, 'Origin Facility', 'Marked as shipped by admin'],
+            () => {
+              res.redirect('/admin/dashboard');
+            }
+          );
+        });
+      } else {
+        res.redirect('/admin/dashboard');
+      }
     });
   },
   markDelivered: (req, res) => {
@@ -48,24 +165,118 @@ const adminController = {
   },
   updatePaymentStatus: (req, res) => {
     const { payment_id, payment_status } = req.body;
-    // only Completed or Failed allowed
-    const status = payment_status === 'Failed' ? 'Failed' : 'Completed';
+    // allow simple set of common values
+    const allowed = ['Pending','Paid','Cancelled'];
+    const status = allowed.includes(payment_status) ? payment_status : 'Pending';
     const db = require('../Database/Database');
     db.run('UPDATE Payments SET payment_status = ? WHERE payment_id = ?', [status, payment_id], function (err) {
-      if (err) return res.redirect('/admin/dashboard');
-      res.redirect('/admin/dashboard');
+      if (!err && status === 'Paid') {
+        // also bump the parcel record
+        db.get('SELECT parcel_id FROM Payments WHERE payment_id = ?', [payment_id], (e, row) => {
+          if (row && row.parcel_id) {
+            db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', ['Ready to Ship', row.parcel_id]);
+          }
+          res.redirect('/admin/dashboard');
+        });
+      } else {
+        res.redirect('/admin/dashboard');
+      }
     });
-  }
+  },
+
+  // allow admin to update parcel status with arbitrary value (validated in form)
+  updateStatus: (req, res) => {
+    const { parcel_id, status } = req.body;
+    const db = require('../Database/Database');
+    db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', [status, parcel_id], function (err) {
+      // if status was changed to shipped from generic form, log it too
+      if (!err && status === 'Shipped') {
+        db.run('INSERT INTO Tracking (parcel_id, location, description) VALUES (?, ?, ?)',
+          [parcel_id, 'Origin Facility', 'Status updated to Shipped'],
+          () => {
+            res.redirect('/admin/dashboard');
+          }
+        );
+      } else {
+        // ignore error and redirect back
+        res.redirect('/admin/dashboard');
+      }
+    });
+  },
 
   // remove a parcel and any associated payment
   deleteParcel: (req, res) => {
     const parcelId = req.body.parcel_id;
     const db = require('../Database/Database');
-    // delete payment first (if exists) then parcel
-    db.run('DELETE FROM Payments WHERE parcel_id = ?', [parcelId], function (err) {
-      // ignore error, continue to remove parcel
-      db.run('DELETE FROM Parcels WHERE parcel_id = ?', [parcelId], function (err2) {
-        res.redirect('/admin/dashboard');
+    // delete tracking entries and payment records before removing the parcel
+    db.serialize(() => {
+      db.run('DELETE FROM Tracking WHERE parcel_id = ?', [parcelId], () => {
+        db.run('DELETE FROM Payments WHERE parcel_id = ?', [parcelId], () => {
+          db.run('DELETE FROM Parcels WHERE parcel_id = ?', [parcelId], () => {
+            res.redirect('/admin/dashboard');
+          });
+        });
+      });
+    });
+  },
+
+  // Clear all data except Customers (Users)
+  clearData: (req, res) => {
+    const db = require('../Database/Database');
+    
+    console.log('[adminController.clearData] User:', req.session.customer.customer_name, 'clearing all parcel and payment data.');
+    
+    // Disable foreign key constraints temporarily to avoid issues
+    db.serialize(() => {
+      db.run('PRAGMA foreign_keys = OFF', (err) => {
+        if (err) {
+          console.error('Error disabling foreign keys:', err);
+          return res.status(500).json({ message: 'Error clearing data' });
+        }
+
+        // Delete from Payments first (has FK to Parcels)
+        db.run('DELETE FROM Payments', (err1) => {
+          if (err1) {
+            console.error('Error deleting payments:', err1);
+            db.run('PRAGMA foreign_keys = ON');
+            return res.status(500).json({ message: 'Error clearing payments' });
+          }
+
+          // Delete from Tracking (has FK to Parcels)
+          db.run('DELETE FROM Tracking', (err2) => {
+            if (err2) {
+              console.error('Error deleting tracking:', err2);
+              db.run('PRAGMA foreign_keys = ON');
+              return res.status(500).json({ message: 'Error clearing tracking' });
+            }
+
+            // Delete from Parcels (has FK to Customers, but we keep Customers)
+            db.run('DELETE FROM Parcels', (err3) => {
+              if (err3) {
+                console.error('Error deleting parcels:', err3);
+                db.run('PRAGMA foreign_keys = ON');
+                return res.status(500).json({ message: 'Error clearing parcels' });
+              }
+
+              // Reset auto-increment counters for SQLite
+              db.run("DELETE FROM sqlite_sequence WHERE name='Payments'", (err4) => {
+                db.run("DELETE FROM sqlite_sequence WHERE name='Tracking'", (err5) => {
+                  db.run("DELETE FROM sqlite_sequence WHERE name='Parcels'", (err6) => {
+                    // Re-enable foreign key constraints
+                    db.run('PRAGMA foreign_keys = ON', (err7) => {
+                      if (err7) {
+                        console.error('Error re-enabling foreign keys:', err7);
+                      }
+                      
+                      console.log('[adminController.clearData] Successfully cleared all parcel, payment, and tracking data. Customers preserved.');
+                      res.json({ message: 'All parcel and payment data cleared successfully. Customers preserved.' });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
       });
     });
   }
