@@ -1,0 +1,92 @@
+<%- include('layout-top') %>
+
+<h2>Admin Dashboard</h2>
+
+<h3>All Parcels</h3>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Tracking</th>
+      <th>Sender</th>
+      <th>Receiver</th>
+      <th>Cost</th>
+      <th>Status</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% parcels.forEach(p => { %>
+      <tr>
+        <td><%= p.parcel_id %></td>
+        <td><%= p.tracking_number %></td>
+        <td><%= p.customer_name || p.sender_id %></td>
+        <td><%= p.receiver_name %></td>
+        <td><%= Number(p.shipping_cost).toFixed(2) %></td>
+        <td>
+          <% let badgeClass=''; let text=p.status; switch(p.status){
+               case 'Pending': badgeClass='badge badge-orange'; break;
+               case 'Paid': badgeClass='badge badge-green'; break;
+               case 'Shipped': badgeClass='badge badge-blue'; break;
+               case 'Delivered': badgeClass='badge badge-gray'; break;
+               case 'Cancelled': badgeClass='badge badge-red'; break;
+             }
+          %>
+          <span class="<%= badgeClass %>"><%= text %></span>
+        </td>
+        <td>
+          <a href="/parcels/<%= p.parcel_id %>">View</a>
+          <% if(p.status==='Pending'){ %>
+            <form action="/admin/parcel/cancel" method="post" style="display:inline;">
+              <input type="hidden" name="parcel_id" value="<%= p.parcel_id %>" />
+              <button type="submit" class="btn secondary" onclick="return confirm('ยืนยันยกเลิกพัสดุนี้?');">Cancel</button>
+            </form>
+          <% } else if(p.status==='Paid'){ %>
+            <form action="/admin/parcel/ship" method="post" style="display:inline;">
+              <input type="hidden" name="parcel_id" value="<%= p.parcel_id %>" />
+              <button type="submit" class="btn" >Mark as Shipped</button>
+            </form>
+          <% } else if(p.status==='Shipped'){ %>
+            <form action="/admin/parcel/deliver" method="post" style="display:inline;">
+              <input type="hidden" name="parcel_id" value="<%= p.parcel_id %>" />
+              <button type="submit" class="btn" >Mark as Delivered</button>
+            </form>
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<h3>All Payments</h3>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Parcel ID</th>
+
+      <th>Status</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% payments.forEach(p => { %>
+      <tr>
+        <td><%= p.payment_id %></td>
+        <td><%= p.parcel_id %></td>
+        <td>
+          <form action="/admin/payment/update-status" method="post" style="display:inline;">
+            <input type="hidden" name="payment_id" value="<%= p.payment_id %>" />
+            <select name="payment_status" onchange="this.form.submit()">
+              <option value="Pending" <%= p.payment_status === 'Pending' ? 'selected' : '' %>>Pending</option>
+              <option value="Paid" <%= p.payment_status === 'Paid' ? 'selected' : '' %>>Paid</option>
+              <option value="Cancelled" <%= p.payment_status === 'Cancelled' ? 'selected' : '' %>>Cancelled</option>
+            </select>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('layout-bottom') %>

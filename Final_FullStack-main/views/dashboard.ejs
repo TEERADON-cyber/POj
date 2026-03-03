@@ -1,0 +1,65 @@
+<%- include('layout-top') %>
+
+<!-- Navbar is included in layout-top.ejs -->
+
+<div class="page-head">
+  <h2>Your Dashboard</h2>
+</div>
+
+<!-- Centered quick action buttons -->
+<div class="quick-actions">
+  <a href="/parcels/create" class="action-card">
+    <div class="action-title">ส่งพัสดุ</div>
+    <div class="action-desc">Create a new parcel</div>
+  </a>
+
+  <a href="/parcels/dashboard" class="action-card">
+    <div class="action-title">พัสดุของฉัน</div>
+    <div class="action-desc">View your parcels</div>
+  </a>
+
+  <a href="/parcels/payments" class="action-card">
+    <div class="action-title">การชำระเงิน</div>
+    <div class="action-desc">View payments</div>
+  </a>
+</div>
+
+<hr />
+
+<h3>Your Parcels</h3>
+<% if (typeof error !== 'undefined') { %>
+  <p class="error"><%= error %></p>
+<% } %>
+<% if (typeof message !== 'undefined') { %>
+  <p class="message"><%= message %></p>
+<% } %>
+<table>
+  <thead>
+    <tr><th>ID</th><th>Tracking</th><th>Receiver</th><th>Weight</th><th>Cost</th><th>Status</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    <% parcels.forEach(p => { %>
+      <tr>
+        <td><%= p.parcel_id %></td>
+        <td><%= p.tracking_number %></td>
+        <td><%= p.receiver_name %></td>
+        <td><%= p.weight %></td>
+        <td><%= p.shipping_cost %></td>
+        <td><%= p.status %></td>
+        <td>
+          <a href="/parcels/<%= p.parcel_id %>">View</a>
+          <% if (p.status === 'Pending') { %>
+            | <a href="/parcels/<%= p.parcel_id %>/pay">Pay</a>
+          <% } %>
+          <% if (p.status === 'Pending' || p.status === 'Paid') { %>
+            | <form action="/parcels/<%= p.parcel_id %>/cancel" method="post" style="display:inline;">
+                <button type="submit" class="btn secondary" onclick="return confirm('ยืนยันยกเลิกพัสดุนี้?');">Cancel</button>
+              </form>
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<%- include('layout-bottom') %>

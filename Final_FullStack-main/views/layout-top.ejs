@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Postal Delivery System</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Postal Delivery System</h1>
+      <% if (typeof session !== 'undefined' && session.customer) { %>
+        <div class="nav">Welcome, <%= session.customer.customer_name %> | <a href="/logout">Logout</a></div>
+      <% } %>
+    </header>
+    <main>

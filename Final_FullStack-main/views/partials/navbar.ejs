@@ -1,0 +1,11 @@
+<nav class="navbar">
+  <% if (session && session.customer) { %>
+    <ul class="nav-list">
+      <% if (session.customer.role !== 'admin') { %>
+        <li><a class="nav-link logout-btn" href="/logout">Logout</a></li>
+      <% } else { %>
+        <li><a class="nav-link logout-btn" href="/logout">Logout</a></li>
+      <% } %>
+    </ul>
+  <% } %>
+</nav>
