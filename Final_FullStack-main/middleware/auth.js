@@ -16,4 +16,17 @@ const ensureCustomer = (req, res, next) => {
   res.redirect('/login');
 };
 
-module.exports = { ensureAuth, ensureCustomer };
+// Middleware ตรวจสอบให้แน่ใจว่าเป็น admin เท่านั้น
+const ensureAdmin = (req, res, next) => {
+  if (req.session && req.session.customer && req.session.customer.role === 'admin') {
+    return next();
+  }
+  // If authenticated but not admin, show access denied
+  if (req.session && req.session.customer) {
+    return res.redirect('/access-denied');
+  }
+  // otherwise ask to login
+  return res.redirect('/login');
+};
+
+module.exports = { ensureAuth, ensureCustomer, ensureAdmin };

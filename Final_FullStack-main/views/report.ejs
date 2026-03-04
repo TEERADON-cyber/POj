@@ -1,7 +1,11 @@
 <%- include('layout-top') %>
 
-<h2>Admin Report</h2>
-<p><a href="/admin/dashboard" class="btn red">Back to Dashboard</a></p>
+<div class="container">
+  <div class="report-header" style="display:flex; justify-content:space-between; align-items:center;">
+    <h2>Admin Report</h2>
+    <a href="/admin/dashboard" class="btn red">Back to Dashboard</a>
+  </div>
+
 
 <!-- filters -->
 <form method="get" action="/admin/report" style="margin-bottom:20px; max-width: none; background: transparent; padding: 0;">
@@ -16,28 +20,28 @@
   <button type="submit" class="btn red">Apply</button>
 </form>
 
-<!-- key metrics cards -->
-<section class="split">
-  <article class="card">
+<!-- key metrics row -->
+<div class="metrics-row" style="display:flex; flex-wrap:wrap; gap:20px; margin-bottom:30px;">
+  <div class="metric-card" style="flex:1 1 220px; background:#fff; padding:16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.04);">
     <h3>Total Revenue (Paid)</h3>
     <p><strong>฿<%= stats.totalRevenuePaid ? stats.totalRevenuePaid.toFixed(2) : '0.00' %></strong></p>
-  </article>
-  <article class="card">
+  </div>
+  <div class="metric-card" style="flex:1 1 220px; background:#fff; padding:16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.04);">
     <h3>Total Parcels</h3>
     <p><strong><%= stats.totalParcels %></strong></p>
-  </article>
-  <article class="card">
+  </div>
+  <div class="metric-card" style="flex:1 1 220px; background:#fff; padding:16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.04);">
     <h3>Pending COD</h3>
     <p><strong>฿<%= stats.pendingCOD ? stats.pendingCOD.toFixed(2) : '0.00' %></strong></p>
-  </article>
-  <article class="card">
+  </div>
+  <div class="metric-card" style="flex:1 1 220px; background:#fff; padding:16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.04);">
     <h3>Success Rate</h3>
     <p><strong><%= (stats.successRate*100).toFixed(1) %>%</strong></p>
-  </article>
-</section>
+  </div>
+</div>
 
 <h3>Payment Method Analysis</h3>
-<table>
+<table style="width:100%;">
   <thead>
       <tr class="table-header-red">
       <th>Method</th>
@@ -55,7 +59,7 @@
 </table>
 
 <h4>COD Outstanding (shipped/delivered but unpaid)</h4>
-<table>
+<table style="width:100%;">
   <thead>
     <tr class="table-header-red">
       <th>Payment ID</th>
@@ -79,7 +83,7 @@
 <h3>Parcel Status Tracking</h3>
 <p>Overdue (ready/pending &gt;7 days): <strong><%= stats.overdueCount %></strong></p>
 <h4>Tracking log locations</h4>
-<table>
+<table style="width:100%;">
   <thead>
     <tr class="table-header-red">
       <th>Location</th>
@@ -97,7 +101,7 @@
 </table>
 
 <h3>Top Customers</h3>
-<table>
+<table style="width:100%;">
   <thead>
     <tr class="table-header-red">
       <th>Customer</th>
@@ -107,7 +111,7 @@
   <tbody>
     <% stats.topCustomers.forEach(c => { %>
       <tr>
-        <td><%= c.customer_name %></td>
+        <td><a href="/admin/user/<%= c.customer_id %>"><%= c.customer_name %></a></td>
         <td><%= c.sentCount %></td>
       </tr>
     <% }) %>
@@ -115,7 +119,7 @@
 </table>
 
 <h3>Latest 10 Parcels</h3>
-<table>
+<table style="width:100%;">
   <thead>
     <tr class="table-header-red">
       <th>ID</th>
@@ -135,5 +139,7 @@
     <% }) %>
   </tbody>
 </table>
+
+</div><!-- /.container -->
 
 <%- include('layout-bottom') %>

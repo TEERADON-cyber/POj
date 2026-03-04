@@ -12,7 +12,20 @@
   </div>
   
   <p><strong>Shipping Cost:</strong> ฿<%= parcel.shipping_cost %></p>
-  <p><strong>Status:</strong> <span class="status-<%= parcel.status.toLowerCase().replace(/\s+/g, '-') %>"><%= parcel.status %></span></p>
+  <p><strong>Status:</strong> <% let statusClass=''; switch(parcel.status){
+       case 'Pending': statusClass='status-pending'; break;
+       case 'Ready to Ship': statusClass='status-ready'; break;
+       case 'Paid': statusClass='status-paid'; break;
+       case 'Shipped': statusClass='status-shipped'; break;
+       case 'Out for Delivery': statusClass='status-out-for-delivery'; break;
+       case 'Delivered': statusClass='status-delivered'; break;
+       case 'Cancelled': statusClass='status-cancel'; break;
+     } %>
+  <span class="<%= statusClass %>"><%= parcel.status %></span></p>
+  
+  <% if (parcel.status === 'Delivered' && parcel.delivered_at) { %>
+    <p><strong>Delivered On:</strong> <span style="color: #065F46; font-weight: 600;"><%= new Date(parcel.delivered_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) %></span></p>
+  <% } %>
 </div>
 
 <h3>Payment</h3>
@@ -21,11 +34,11 @@
   <p>Status: <%= payment.payment_status %></p>
 <% } else { %>
   <p>No payment recorded.</p>
-  <% if (parcel.status === 'Pending') { %>
+  <% if (parcel.status === 'Pending' && (!user || user.role !== 'admin')) { %>
     <p><a class="btn" href="/parcels/<%= parcel.parcel_id %>/pay">Pay Now</a></p>
   <% } %>
 <% } %>
-<% if (parcel.status === 'Pending' || parcel.status === 'Paid') { %>
+<% if ((parcel.status === 'Pending' || parcel.status === 'Paid') && (!user || user.role !== 'admin')) { %>
   <form action="/parcels/<%= parcel.parcel_id %>/cancel" method="post" id="cancelForm-<%= parcel.parcel_id %>" style="margin-top: 20px; display: inline; background: transparent; padding: 0; border: none;">
     <button type="button" onclick="confirmCancel(<%= parcel.parcel_id %>);">Cancel Parcel</button>
   </form>
@@ -121,6 +134,14 @@
   .status-shipped {
     background: #CFFAFE;
     color: #0369A1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .status-out-for-delivery {
+    background: #FEDBA8;
+    color: #92400E;
     padding: 4px 8px;
     border-radius: 4px;
     font-weight: 600;

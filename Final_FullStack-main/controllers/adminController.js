@@ -80,7 +80,7 @@ const adminController = {
                                   stats.trackLocations = rows7 || [];
                                   // top customers by parcel count
                                   db.all(
-                                    `SELECT c.customer_name, COUNT(*) AS sentCount
+                                    `SELECT c.customer_id, c.customer_name, COUNT(*) AS sentCount
                                      FROM Parcels par
                                      JOIN Customers c ON par.sender_id = c.customer_id
                                      GROUP BY par.sender_id
@@ -156,31 +156,108 @@ const adminController = {
       }
     });
   },
+  startDelivery: (req, res) => {
+    const { parcel_id } = req.body;
+    const db = require('../Database/Database');
+    
+    // Update parcel status to "Out for Delivery" and add tracking entry
+    db.run(
+      'UPDATE Parcels SET status = ? WHERE parcel_id = ?',
+      ['Out for Delivery', parcel_id],
+      function(err) {
+        if (err) {
+          return res.redirect('/admin/dashboard');
+        }
+        
+        // Add tracking entry for delivery start
+        db.run(
+          'INSERT INTO Tracking (parcel_id, location, description) VALUES (?, ?, ?)',
+          [parcel_id, 'In Transit', 'Package out for delivery'],
+          () => {
+            res.redirect('/admin/dashboard');
+          }
+        );
+      }
+    );
+  },
   markDelivered: (req, res) => {
     const { parcel_id } = req.body;
     const db = require('../Database/Database');
-    db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', ['Delivered', parcel_id], () => {
-      res.redirect('/admin/dashboard');
-    });
+    const deliveredAt = new Date().toISOString();
+    
+    // Update parcel status and save delivered_at timestamp
+    db.run(
+      'UPDATE Parcels SET status = ?, delivered_at = ? WHERE parcel_id = ?',
+      ['Delivered', deliveredAt, parcel_id],
+      function(err) {
+        if (err) {
+          return res.redirect('/admin/dashboard');
+        }
+        
+        // Add tracking entry for delivery
+        db.run(
+          'INSERT INTO Tracking (parcel_id, location, description) VALUES (?, ?, ?)',
+          [parcel_id, 'Delivery Location', 'Parcel delivered'],
+          () => {
+            // Check if there's a COD payment for this parcel and mark it as Paid
+            db.get(
+              'SELECT payment_id, payment_method FROM Payments WHERE parcel_id = ? AND payment_method = ?',
+              [parcel_id, 'COD'],
+              (err2, payment) => {
+                if (!err2 && payment) {
+                  // Automatically mark COD payment as Paid
+                  db.run(
+                    'UPDATE Payments SET payment_status = ? WHERE payment_id = ?',
+                    ['Paid', payment.payment_id],
+                    () => {
+                      res.redirect('/admin/dashboard');
+                    }
+                  );
+                } else {
+                  res.redirect('/admin/dashboard');
+                }
+              }
+            );
+          }
+        );
+      }
+    );
   },
   updatePaymentStatus: (req, res) => {
-    const { payment_id, payment_status } = req.body;
-    // allow simple set of common values
-    const allowed = ['Pending','Paid','Cancelled'];
-    const status = allowed.includes(payment_status) ? payment_status : 'Pending';
+    // Deprecated: use explicit approve/reject endpoints instead
+    res.redirect('/admin/dashboard');
+  },
+
+  // Approve a pending payment: mark as Paid and update parcel status
+  approvePayment: (req, res) => {
+    // extra server-side role check
+    if (!req.session || !req.session.customer || req.session.customer.role !== 'admin') {
+      return res.redirect('/access-denied');
+    }
+    const paymentId = req.params && req.params.id ? req.params.id : null;
+    if (!paymentId) return res.redirect('/admin/dashboard');
     const db = require('../Database/Database');
-    db.run('UPDATE Payments SET payment_status = ? WHERE payment_id = ?', [status, payment_id], function (err) {
-      if (!err && status === 'Paid') {
-        // also bump the parcel record
-        db.get('SELECT parcel_id FROM Payments WHERE payment_id = ?', [payment_id], (e, row) => {
-          if (row && row.parcel_id) {
-            db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', ['Ready to Ship', row.parcel_id]);
-          }
-          res.redirect('/admin/dashboard');
-        });
-      } else {
-        res.redirect('/admin/dashboard');
-      }
+    db.get('SELECT parcel_id FROM Payments WHERE payment_id = ?', [paymentId], (err, row) => {
+      if (err || !row) return res.redirect('/admin/dashboard');
+      db.run('UPDATE Payments SET payment_status = ? WHERE payment_id = ?', ['Paid', paymentId], function (uerr) {
+        if (!uerr && row.parcel_id) {
+          db.run('UPDATE Parcels SET status = ? WHERE parcel_id = ?', ['Ready to Ship', row.parcel_id]);
+        }
+        return res.redirect('/admin/dashboard');
+      });
+    });
+  },
+
+  // Reject a pending payment: mark as Cancelled (do not delete)
+  rejectPayment: (req, res) => {
+    if (!req.session || !req.session.customer || req.session.customer.role !== 'admin') {
+      return res.redirect('/access-denied');
+    }
+    const paymentId = req.params && req.params.id ? req.params.id : null;
+    if (!paymentId) return res.redirect('/admin/dashboard');
+    const db = require('../Database/Database');
+    db.run('UPDATE Payments SET payment_status = ? WHERE payment_id = ?', ['Cancelled', paymentId], function (err) {
+      return res.redirect('/admin/dashboard');
     });
   },
 
@@ -220,6 +297,28 @@ const adminController = {
     });
   },
 
+  // Show detailed user information for admin
+  userDetail: (req, res) => {
+    if (!req.session || !req.session.customer || req.session.customer.role !== 'admin') {
+      return res.redirect('/access-denied');
+    }
+    const userId = req.params && req.params.id ? req.params.id : null;
+    const db = require('../Database/Database');
+    if (!userId) {
+      return res.redirect('/admin/dashboard');
+    }
+    db.get('SELECT * FROM Customers WHERE customer_id = ?', [userId], (err, user) => {
+      if (err || !user) return res.redirect('/admin/dashboard');
+      // fetch parcels sent by this customer so the admin can review
+      db.all('SELECT * FROM Parcels WHERE sender_id = ?', [userId], (err2, parcels) => {
+        if (err2 || !Array.isArray(parcels)) parcels = [];
+        res.render('user-detail', {
+          user,
+          parcels,
+        });
+      });
+    });
+  },
   // Clear all data except Customers (Users)
   clearData: (req, res) => {
     const db = require('../Database/Database');

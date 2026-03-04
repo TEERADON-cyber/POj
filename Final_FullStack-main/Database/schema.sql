@@ -40,13 +40,14 @@ CREATE TABLE IF NOT EXISTS Payments (
 );
 
 -- optional trigger that will automatically bump the parcel status
--- when a payment record becomes 'Paid'.  (backend logic also handles this.)
+-- when a payment record becomes 'Paid'. Only updates if status is still in pending/paid state.
+-- Does NOT overwrite Shipped, Out for Delivery, or Delivered statuses.
 CREATE TRIGGER IF NOT EXISTS payments_after_update
 AFTER UPDATE ON Payments
 FOR EACH ROW
 WHEN NEW.payment_status = 'Paid'
 BEGIN
-  UPDATE Parcels SET status = 'Ready to Ship' WHERE parcel_id = NEW.parcel_id;
+  UPDATE Parcels SET status = 'Ready to Ship' WHERE parcel_id = NEW.parcel_id AND status IN ('Pending', 'Paid');
 END;
 
 

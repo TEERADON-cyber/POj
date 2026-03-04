@@ -27,6 +27,8 @@ app.use(session({
 // expose session to views
 app.use((req, res, next) => {
   res.locals.session = req.session;
+  // expose a simpler `user` local for templates (maps to session.customer)
+  res.locals.user = req.session ? req.session.customer : null;
   res.locals.currentPath = req.path;
   next();
 });
@@ -63,6 +65,11 @@ app.get('/', (req, res) => {
   if (!req.session || !req.session.customer) return res.redirect('/login');
   if (req.session.customer.role === 'admin') return res.redirect('/admin/dashboard');
   res.redirect('/parcels/dashboard');
+});
+
+// Access denied page for unauthorized access attempts
+app.get('/access-denied', (req, res) => {
+  res.status(403).render('access-denied', { message: null });
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

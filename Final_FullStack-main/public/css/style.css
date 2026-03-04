@@ -4,6 +4,18 @@ header h1{margin:0;font-size:20px}
 .nav{float:right}
 main{padding:20px}
 form{max-width:600px;background:#fff;padding:16px;border-radius:6px}
+/* Override form styling for inline table action buttons */
+table form, form[style*="display:inline-block"] {
+  max-width: none;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+/* Reset button margins in table forms */
+table form button, form[style*="display:inline-block"] button {
+  margin-top: 0;
+  margin-right: 4px;
+}
 label{display:block;margin-top:8px}
 input[type=text],input[type=email],input[type=password],textarea,input[type=number]{width:100%;padding:8px;margin-top:4px}
 button{margin-top:12px;padding:8px 16px}
@@ -27,50 +39,67 @@ th,td{padding:8px;border:1px solid #ddd}
 
 /* status-specific badges for parcels */
 .status-ready {
-  background: #D1FAE5; /* light green */
-  color: #065F46;      /* dark green text */
-  padding: 4px 10px;
+  background: #BFDBFE; /* light blue */
+  color: #1E40AF;      /* dark blue text */
+  padding: 6px 12px;
   border-radius: 12px;
   font-weight: 600;
   font-size: 0.85em;
+  display: inline-block;
 }
 .status-pending {
   background: #FEF3C7; /* light yellow/warning */
   color: #78350F;      /* deep orange text */
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 12px;
   font-weight: 600;
   font-size: 0.85em;
+  display: inline-block;
 }
 .status-paid {
   background: #BFDBFE; /* light blue */
   color: #1E40AF;      /* dark blue text */
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 12px;
   font-weight: 600;
   font-size: 0.85em;
+  display: inline-block;
 }
 .status-cancel {
   background: #FEE2E2; /* light red */
   color: #7F1D1D;      /* dark red text */
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 12px;
   font-weight: 600;
   font-size: 0.85em;
+  display: inline-block;
 }
 .status-shipped {
   background: #CFFAFE; /* light cyan/blue */
   color: #0369A1;      /* dark cyan text */
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 6px 12px;
+  border-radius: 12px;
   font-weight: 600;
+  font-size: 0.85em;
+  display: inline-block;
+}
+.status-out-for-delivery {
+  background: #FEDBA8; /* light orange */
+  color: #92400E;      /* dark orange text */
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.85em;
+  display: inline-block;
 }
 .status-delivered {
   background: #D1FAE5; /* light green */
   color: #065F46;      /* dark green text */
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 6px 12px;
+  border-radius: 12px;
   font-weight: 600;
+  font-size: 0.85em;
+  display: inline-block;
 }
 
 /* small secondary text under names */
@@ -140,6 +169,36 @@ body {
   font-family: "Manrope", "Segoe UI", Tahoma, sans-serif;
   color: var(--ink-900);
   background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 50%, #E0F2FE 100%);
+}
+
+/* Make layout use flexbox so footer stays at bottom without fixed positioning */
+html, body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-wrapper {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-footer {
+  background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 100%);
+  color: #fff;
+  text-align: center;
+  padding: 15px 0;
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  flex: 1 0 auto;
 }
 
 body::before,
@@ -398,17 +457,16 @@ body::after {
 
 .page-head {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  background: transparent;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .page-head::after {
+  /* disable decorative blue glow behind headers */
+  display: none;
   content: "";
-  position: absolute;
-  right: -34px;
-  top: -34px;
-  width: 148px;
-  height: 148px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.26) 0%, transparent 70%);
 }
 
 .page-head h2 {
@@ -945,7 +1003,8 @@ html[data-theme="dark"] .card {
 }
 
 html[data-theme="dark"] .page-head::after {
-  background: radial-gradient(circle, rgba(229, 196, 104, 0.18) 0%, transparent 72%);
+  display: none;
+  background: none;
 }
 
 html[data-theme="dark"] .btn.secondary {
